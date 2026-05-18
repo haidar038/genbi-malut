@@ -1,11 +1,46 @@
 import Groq from 'groq-sdk';
 import { GENBI_KNOWLEDGE_BASE } from '@/lib/constants/genbi-knowledge';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+function getClientIP(req: Request): string {
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return req.headers.get('x-real-ip') || 'unknown';
+}
+
 export async function POST(req: Request) {
+  // --- Rate Limiting Layer ---
+  const ip = getClientIP(req);
+  const rateLimit = checkRateLimit(ip);
+
+  if (!rateLimit.allowed) {
+    const isDaily = rateLimit.reason === 'rate_limit_daily';
+    const message = isDaily
+      ? `Maaf, Anda telah mencapai batas harian (**20 pertanyaan/hari**). Silakan coba lagi besok. 🙏`
+      : `Maaf, Anda mengirim terlalu banyak pesan. Silakan tunggu sekitar **${rateLimit.retryAfterSeconds} detik** sebelum mencoba lagi.`;
+
+    return new Response(
+      JSON.stringify({
+        error: rateLimit.reason,
+        message,
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': String(rateLimit.retryAfterSeconds || 60),
+          'X-RateLimit-Remaining-Minute': String(rateLimit.remainingMinute),
+          'X-RateLimit-Remaining-Daily': String(rateLimit.remainingDaily),
+        },
+      }
+    );
+  }
+
   try {
     const { messages } = await req.json();
 
@@ -53,14 +88,32 @@ FORMAT OUTPUT MARKDOWN (HARUS DIPATUHI):
 
     const allMessages = [systemInstruction, ...limitedMessages];
 
-    // Use Groq SDK with streaming
-    const stream = await groq.chat.completions.create({
+    // Use Groq SDK with streaming (with 429 handling)
+    let stream;
+    try {
+      stream = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
       messages: allMessages,
       stream: true,
       temperature: 0.7,
       max_completion_tokens: 1024,
     });
+
+    } catch (groqError: unknown) {
+      // Handle Groq rate limit (429) specifically
+      const status = (groqError as { status?: number })?.status;
+      if (status === 429) {
+        return new Response(
+          JSON.stringify({
+            error: 'groq_rate_limit',
+            message:
+              'Maaf, server sedang sibuk. Silakan coba lagi dalam beberapa saat. 🙏',
+          }),
+          { status: 429, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      throw groqError;
+    }
 
     // Create a ReadableStream from the Groq stream
     const encoder = new TextEncoder();
@@ -85,6 +138,8 @@ FORMAT OUTPUT MARKDOWN (HARUS DIPATUHI):
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Transfer-Encoding': 'chunked',
+        'X-RateLimit-Remaining-Minute': String(rateLimit.remainingMinute),
+        'X-RateLimit-Remaining-Daily': String(rateLimit.remainingDaily),
       },
     });
   } catch (error) {

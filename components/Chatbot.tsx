@@ -76,6 +76,25 @@ export default function Chatbot() {
         body: JSON.stringify({ messages: apiMessages }),
       });
 
+      // Handle rate limiting (429)
+      if (response.status === 429) {
+        let rateLimitMsg = 'Maaf, Anda mengirim terlalu banyak pesan. Silakan coba lagi nanti. 🙏';
+        try {
+          const errorData = await response.json();
+          if (errorData.message) rateLimitMsg = errorData.message;
+        } catch { /* use default message */ }
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: rateLimitMsg }
+              : m
+          )
+        );
+        setIsLoading(false);
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(`Server error: ${response.status}`);
       }
