@@ -17,6 +17,7 @@ Website ini berfungsi sebagai pusat informasi terpusat yang menggantikan keterga
 ### Konten Informatif
 
 - **Landing Page** - Tampilan pertama yang menarik dan profesional
+- **Profil** - Profil lengkap GenBI Maluku Utara
 - **Tentang Kami** - Sejarah, visi, dan misi GenBI Maluku Utara
 - **Program Unggulan** - Portfolio program kerja dan inisiatif komunitas
 - **Komisariat** - Profil tiga perguruan tinggi afiliasi (Unkhair, UMMU, IAIN Ternate)
@@ -38,7 +39,7 @@ Website ini berfungsi sebagai pusat informasi terpusat yang menggantikan keterga
 - **AI/Chatbot:** Groq AI SDK dengan @ai-sdk/groq
 - **Icons:** Hugeicons
 - **Language:** TypeScript
-- **Font:** Neue Power (custom branding)
+- **Font:** Host Grotesk (custom branding)
 
 ## Mulai Pengembangan
 
